@@ -43,4 +43,5 @@ pub enum Stmt {
     While(Box<Expr>, Box<Stmt>),
     Return(Box<Expr>),
     Expr(Box<Expr>),
+    FnDecl(Ident, Vec<Ident>, Box<Stmt>)
 }

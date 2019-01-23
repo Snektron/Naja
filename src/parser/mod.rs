@@ -12,7 +12,7 @@ macro_rules! unexpected {
     ($tok:expr) => (Err(ParseError::UnexpectedToken($tok)))
 }
 
-// This is a macro because we can now expect tokens with values, `expect!(Token::Literal(_))`
+// This is a macro because we can now expect tokens with values, `expect!(self, Token::Literal(_))`
 macro_rules! expect {
     ($parser:expr, $tok:pat) => {{
         match $parser.next() {
@@ -97,6 +97,7 @@ impl<'i> Parser<'i> {
             Token::If => self.if_stmt(),
             Token::While => self.while_stmt(),
             Token::Return => self.return_stmt(),
+            Token::Fn => self.fn_stmt(),
             _ => self.expr().map(Box::new).map(Stmt::Expr)   
         }
     }
@@ -108,7 +109,12 @@ impl<'i> Parser<'i> {
             stmts.push(self.stmt()?);
         }
 
-        self.next().map(|_| Stmt::Compound(stmts))
+        self.next()?;
+
+        match stmts.len() {
+            1 => Ok(stmts.pop().unwrap()),
+            _ => Ok(Stmt::Compound(stmts))
+        }
     }
 
     fn if_stmt(&mut self) -> Result<Stmt> {
@@ -123,10 +129,10 @@ impl<'i> Parser<'i> {
         self.next()?;
 
         let alt = if *self.peek()? == Token::If {
-                self.if_stmt().map(Box::new)?
-            } else {
-                self.compound_stmt().map(Box::new)?
-            };
+            self.if_stmt().map(Box::new)?
+        } else {
+            self.compound_stmt().map(Box::new)?
+        };
 
         Ok(Stmt::If(cond, body, Some(alt)))
     }
@@ -143,6 +149,26 @@ impl<'i> Parser<'i> {
 
         let expr = self.expr().map(Box::new)?;
         Ok(Stmt::Return(expr))
+    }
+
+    fn fn_stmt(&mut self) -> Result<Stmt> {
+        expect!(self, Token::Fn)?;
+
+        let ident = self.ident()?;
+
+        expect!(self, Token::ParenOpen)?;
+        let params = self.list_until(Token::ParenClose, Self::ident)?;
+
+        let body = match self.peek()? {
+            Token::BraceOpen => self.compound_stmt(),
+            Token::Eq => {
+                self.next()?;
+                self.expr().map(Box::new).map(Stmt::Return)
+            },
+            tok => unexpected!(tok.clone())
+        }?;
+
+        Ok(Stmt::FnDecl(ident, params, Box::new(body)))
     }
 
     fn expr(&mut self) -> Result<Expr> {
@@ -213,7 +239,7 @@ impl<'i> Parser<'i> {
             match self.peek_opt()? {
                 Some(Token::ParenOpen) => {
                     self.next()?;
-                    let args = self.exprlist_until(Token::ParenClose)?;
+                    let args = self.list_until(Token::ParenClose, Self::expr)?;
                     expr = Expr::Call(Box::new(expr), args);
                 },
                 _ => return Ok(expr)
@@ -221,21 +247,22 @@ impl<'i> Parser<'i> {
         }
     }
 
-    fn exprlist_until(&mut self, end: Token) -> Result<Vec<Expr>> {
-        let mut exprs = Vec::new();
+    fn list_until<F, R>(&mut self, end: Token, mut f: F) -> Result<Vec<R>>
+    where F: FnMut(&mut Self) -> Result<R> {
+        let mut list = Vec::new();
 
         if *self.peek()? == end {
-            return Ok(exprs);
+            return self.next().map(|_| list);
         }
 
-        exprs.push(self.expr()?);
+        list.push(f(self)?);
 
         while *self.peek()? != end  {
             expect!(self, Token::Comma)?;
-            exprs.push(self.expr()?);
+            list.push(f(self)?);
         }
 
-        self.next().map(|_| exprs)
+        self.next().map(|_| list)
     }
 
     fn atom(&mut self) -> Result<Expr> {
@@ -248,6 +275,13 @@ impl<'i> Parser<'i> {
                 Ok(expr)
             },
             Token::Ident(text) => Ok(Expr::LValue(LValueExpr::Ident(text))),
+            tok => unexpected!(tok)
+        }
+    }
+
+    fn ident(&mut self) -> Result<Ident> {
+        match self.next()? {
+            Token::Ident(ident) => Ok(ident),
             tok => unexpected!(tok)
         }
     }
