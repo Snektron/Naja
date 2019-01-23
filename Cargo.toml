@@ -1,0 +1,8 @@
+[package]
+name = "naja"
+version = "0.1.0"
+authors = ["Robin Voetter <robin@voetter.nl>"]
+edition = "2018"
+
+[dependencies]
+lazy_static = "1.2.0"
