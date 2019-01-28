@@ -1,6 +1,6 @@
 use std::ptr::NonNull;
 use std::cell::Cell;
-use std::borrow::{Borrow, BorrowMut};
+use std::convert::{AsRef, AsMut};
 use std::ops::{Deref, DerefMut};
 
 static ROOTED_MASK: u64 = 1 << 63;
@@ -25,9 +25,9 @@ struct GcBoxMeta {
 }
 
 impl GcBoxMeta {
-    fn new() -> Self {
+    fn new_rooted() -> Self {
         GcBoxMeta {
-            bits: 0
+            bits: ROOTED_MASK
         }
     }
 
@@ -128,8 +128,17 @@ where T: Trace {
         }
     }
 
-    pub fn unroot(self) {
-        // Drops self, unrooting the item
+    pub fn unroot(self) -> Gc<T>{
+        self.decay()
+    }
+}
+
+impl<T> Trace for Root<T>
+where T: Trace {
+    fn trace(&self, mark: Mark) {
+        unsafe {
+            self.ptr.as_ref().trace(mark);
+        }
     }
 }
 
@@ -146,18 +155,18 @@ where T: Trace {
     }
 }
 
-impl<T> Borrow<T> for Root<T>
+impl<T> AsRef<T> for Root<T>
 where T: Trace {
-    fn borrow(&self) -> &T {
+    fn as_ref(&self) -> &T {
         unsafe {
             &self.ptr.as_ref().data
         }
     }
 }
 
-impl<T> BorrowMut<T> for Root<T>
+impl<T> AsMut<T> for Root<T>
 where T: Trace {
-    fn borrow_mut(&mut self) -> &mut T {
+    fn as_mut(&mut self) -> &mut T {
         unsafe {
             &mut self.ptr.as_mut().data
         }
@@ -169,23 +178,23 @@ where T: Trace {
     type Target = T;
 
     fn deref(&self) -> &T {
-        self.borrow()
+        self.as_ref()
     }
 }
 
 impl<T> DerefMut for Root<T>
 where T: Trace {
     fn deref_mut(&mut self) -> &mut T {
-        self.borrow_mut()
+        self.as_mut()
     }
 }
 
-struct Environment<'a> {
-    objects: Vec<Box<GcBox<dyn Trace + 'a>>>,
+pub struct Environment {
+    objects: Vec<Box<GcBox<dyn Trace>>>,
     mark: Mark
 }
 
-impl<'a> Environment<'a> {
+impl Environment {
     pub fn new() -> Self {
         Environment {
             objects: Vec::new(),
@@ -193,10 +202,10 @@ impl<'a> Environment<'a> {
         }
     }
 
-    pub fn construct<T>(&'a mut self, value: T) -> Root<T> 
-    where T: 'a + Trace {
+    pub fn construct<T>(&mut self, value: T) -> Root<T> 
+    where T: Trace + 'static {
         let mut value = Box::new(GcBox {
-            meta: Cell::new(GcBoxMeta::new()),
+            meta: Cell::new(GcBoxMeta::new_rooted()),
             data: value
         });
 
@@ -225,5 +234,9 @@ impl<'a> Environment<'a> {
                 i += 1;
             }
         }
+    }
+
+    pub fn num_objects(&self) -> usize {
+        self.objects.len()
     }
 }

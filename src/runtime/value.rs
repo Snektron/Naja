@@ -1,7 +1,15 @@
 use crate::runtime::gc::{Trace, Gc, Mark};
 
 pub struct Array {
-    items: Vec<Value>
+    pub items: Vec<Value>
+}
+
+impl Array {
+    pub fn new() -> Self {
+        Array {
+            items: Vec::new()
+        }
+    }
 }
 
 impl Trace for Array {
