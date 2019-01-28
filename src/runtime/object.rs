@@ -1,17 +1,29 @@
-use crate::runtime::gc::Gc;
+use crate::runtime::gc::{Trace, Gc};
 
 pub struct Array {
-    pub items: Vec<Gc>
+    items: Vec<Value>
+}
+
+impl Trace for Array {
+    fn trace(&self, mark: usize) {
+        for item in self.items.iter() {
+            item.trace(mark);
+        }
+    }
 }
 
 pub enum Value {
+    Null,
     Int(i64),
     Float(f64),
-    Object(Gc)
+    Array(Gc<Array>)
 }
 
-pub enum Object {
-    Int(i64),
-    Float(i64),
-    Array(Array)
+impl Trace for Value {
+    fn trace(&self, mark: usize) {
+        match self {
+            Value::Array(array) => array.trace(mark),
+            _ => {}
+        }
+    }
 }

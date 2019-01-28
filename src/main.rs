@@ -5,42 +5,35 @@ mod ast;
 mod parser;
 mod runtime;
 
-use std::ops::Deref;
-use runtime::object::*;
-use runtime::gc::*;
-
 fn main() {
-    // let input = r#"
-    //     c =
-    // "#;
-    // let mut parser = parser::Parser::new(input);
-    // match parser.program() {
-    //     Ok(ast) => println!("{:#?}", ast),
-    //     Err(err) => eprintln!("Error: {}", err)
-    // }
+    let input = r#"
+        c = 1 + 2
+    "#;
+    let mut parser = parser::Parser::new(input);
 
-    let debug_heap = |heap: &Heap| println!("Objects: {}", heap.heap.len());
-
-    let mut heap = Heap::new();
-    let roots: Vec<GcHandle> = Vec::new();
-
-    let item = {
-        let b = heap.construct(Object::Int(10));
-        debug_heap(&heap);
-
-        let mut vec = heap.construct(Object::Array(Array {
-            items: vec![b.as_gc()]
-        }));
-
-        let vec_gc = vec.as_gc();
-        if let Object::Array(ref mut array) = *vec {
-            array.items.push(vec_gc);
+    let ast = match parser.program() {
+        Ok(ast) => ast,
+        Err(err) => {
+            eprintln!("Parse Error: {}", err);
+            return;
         }
-
-        b
     };
 
-    debug_heap(&heap);
-    heap.gc(roots.iter());
-    debug_heap(&heap);
+    let mut rt = runtime::Runtime::new();
+    let result = rt.execute(&ast);
+    if let Err(err) = result {
+        eprintln!("Runtime Error: {}", err);
+    }
 }
+
+// fn test_push(&mut self, params: Vec<Value>) -> Result<Value> {
+//     let (obj_ref, value) = match params {
+//         [Value::Object(obj_ref), value] => (arr, value),
+//         _ => return Err(RuntimeError::InvalidArguments);
+//     };
+
+//     let array = obj_ref.try_downcast::<Array>().ok_or(Err::InvalidArguments)?;
+//     array.items.push(value);
+
+//     Ok(Value::Null)
+// }

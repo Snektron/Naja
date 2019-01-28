@@ -1,166 +1,169 @@
-use std::num::Wrapping;
-use std::cell::Cell;
 use std::ptr::NonNull;
+use std::cell::Cell;
+use std::num::Wrapping;
+use std::borrow::{Borrow, BorrowMut};
 use std::ops::{Deref, DerefMut};
-use std::clone::Clone;
-use std::iter::Iterator;
-use crate::runtime::object::Object;
 
-trait Root {
-    fn gc_box(&self) -> &GcBox;
+pub trait Trace {
+    fn trace(&self, mark: usize);
 }
 
-pub struct GcBox {
-    strong: Cell<usize>,
+struct GcBox<T>
+where T: Trace + ?Sized {
+    rooted: Cell<bool>,
     mark: Cell<usize>,
-    inner: Object,
+    data: T
 }
 
-impl GcBox {
-    fn inc_strong(&self) {
-        self.strong.set(self.strong.get() + 1)
-    }
-
-    fn dec_strong(&self) {
-        self.strong.set(self.strong.get() - 1)
-    }
-
-    fn handle(&mut self) -> GcHandle {
-        self.inc_strong();
-
-        GcHandle {
-            inner: NonNull::new(self).unwrap()
+impl<T> Trace for GcBox<T>
+where T: Trace {
+    fn trace(&self, mark: usize) {
+        if self.mark.get() != mark {
+            self.mark.set(mark);
+            self.data.trace(mark);
         }
     }
 }
 
-#[derive(Clone)]
-pub struct Gc {
-    inner: NonNull<GcBox>
+pub struct Gc<T>
+where T: Trace {
+    ptr: NonNull<GcBox<T>>
 }
 
-impl Deref for Gc {
-    type Target = Object;
+impl<T> Gc<T>
+where T: Trace {
+    pub fn try_root(&self) -> Option<Root<T>> {
+        let gcbox = unsafe {
+            self.ptr.as_ref()
+        };
 
-    fn deref(&self) -> &Object {
-        unsafe { &self.inner.as_ref().inner }
-    }
-}
-
-impl DerefMut for Gc {
-    fn deref_mut(&mut self) -> &mut Object {
-        unsafe { &mut self.inner.as_mut().inner }
-    }
-}
-
-impl Root for Gc {
-    fn gc_box(&self) -> &GcBox {
-        unsafe { self.inner.as_ref() }
-    }
-}
-
-impl Root for &Gc {
-    fn gc_box(&self) -> &GcBox {
-        unsafe { self.inner.as_ref() }
-    }
-}
-
-pub struct GcHandle {
-    inner: NonNull<GcBox>
-}
-
-impl GcHandle {
-    pub fn as_gc(&self) -> Gc {
-        Gc {
-            inner: self.inner
+        if gcbox.rooted.get() {
+            None
+        } else {
+            gcbox.rooted.set(true);
+            Some(Root {
+                ptr: self.ptr
+            })
         }
     }
+
+    pub fn root(&self) -> Root<T> {
+        self.try_root().expect("Object already rooted")
+    }
 }
 
-impl Clone for GcHandle {
-    fn clone(&self) -> GcHandle {
+impl<T> Trace for Gc<T>
+where T: Trace {
+    fn trace(&self, mark: usize) {
         unsafe {
-            self.inner.as_ref().inc_strong();
-        }
-
-        GcHandle {
-            inner: self.inner
+            self.ptr.as_ref().trace(mark);
         }
     }
 }
 
-impl Drop for GcHandle {
+pub struct Root<T>
+where T: Trace {
+    ptr: NonNull<GcBox<T>>
+}
+
+impl<T> Root<T>
+where T: Trace {
+    pub fn decay(&self) -> Gc<T> {
+        Gc {
+            ptr: self.ptr
+        }
+    }
+
+    pub fn unroot(self) {
+        // Drops self, unrooting the item
+    }
+}
+
+impl<T> Drop for Root<T>
+where T: Trace {
     fn drop(&mut self) {
         unsafe {
-            self.inner.as_ref().dec_strong();
+            self.ptr.as_ref().rooted.set(false)
         }
     }
 }
 
-impl Deref for GcHandle {
-    type Target = Object;
-
-    fn deref(&self) -> &Object {
-        unsafe { &self.inner.as_ref().inner }
+impl<T> Borrow<T> for Root<T>
+where T: Trace {
+    fn borrow(&self) -> &T {
+        unsafe {
+            &self.ptr.as_ref().data
+        }
     }
 }
 
-impl DerefMut for GcHandle {
-    fn deref_mut(&mut self) -> &mut Object {
-        unsafe { &mut self.inner.as_mut().inner }
+impl<T> BorrowMut<T> for Root<T>
+where T: Trace {
+    fn borrow_mut(&mut self) -> &mut T {
+        unsafe {
+            &mut self.ptr.as_mut().data
+        }
     }
 }
 
-impl Root for GcHandle {
-    fn gc_box(&self) -> &GcBox {
-        unsafe { self.inner.as_ref() }
+impl<T> Deref for Root<T>
+where T: Trace {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        self.borrow()
     }
 }
 
-impl Root for &GcHandle {
-    fn gc_box(&self) -> &GcBox {
-        unsafe { self.inner.as_ref() }
+impl<T> DerefMut for Root<T>
+where T: Trace {
+    fn deref_mut(&mut self) -> &mut T {
+        self.borrow_mut()
     }
 }
 
-pub struct Heap {
-    pub heap: Vec<Box<GcBox>>,
-    round: Wrapping<usize>
+struct Environment<'a> {
+    objects: Vec<Box<GcBox<dyn Trace + 'a>>>,
+    mark: Wrapping<usize>
 }
 
-impl Heap {
+impl<'a> Environment<'a> {
     pub fn new() -> Self {
-        Heap {
-            heap: Vec::new(),
-            round: Wrapping(0)
+        Environment {
+            objects: Vec::new(),
+            mark: Wrapping(0)
         }
     }
 
-    pub fn construct(&mut self, object: Object) -> GcHandle {
-        self.heap.push(Box::new(GcBox {
-            strong: Cell::new(0),
-            mark: Cell::new(self.round.0),
-            inner: object
-        }));
+    pub fn construct<T: 'a>(&'a mut self, value: T) -> Root<T> 
+    where T: Trace {
+        let mut value = Box::new(GcBox {
+            rooted: Cell::new(true),
+            mark: Cell::new(self.mark.0),
+            data: value
+        });
 
-        self.heap.last_mut().unwrap().handle()
+        let root = Root {
+            ptr: NonNull::new(&mut *value).unwrap()
+        };
+
+        self.objects.push(value);
+        root
     }
 
-    pub fn gc<I, T>(&mut self, roots: I)
-    where I: Iterator<Item = T>, T: Root {
-        self.round += Wrapping(1);
-        let round = self.round.0;
+    pub fn gc<T>(&mut self, root: &T)
+    where T: Trace {
+        self.mark += Wrapping(1);
+        root.trace(self.mark.0);
+        self.sweep();
+    }
 
-        for object in roots {
-            object.gc_box().mark.set(round);
-        }
-
+    fn sweep(&mut self) {
         let mut i: usize = 0;
-        while i < self.heap.len() {
-            let object = &self.heap[i];
-            if object.strong.get() == 0 && object.mark.get() != round {
-                // No references to this object, so delete it
-                self.heap.swap_remove(i);
+        while i < self.objects.len() {
+            let object = &self.objects[i];
+            if !object.rooted.get() || object.mark.get() != self.mark.0 {
+                self.objects.swap_remove(i);
             } else {
                 i += 1;
             }

@@ -1,6 +1,5 @@
-pub mod scope;
-pub mod object;
 pub mod gc;
+pub mod object;
 
 use std::fmt;
 use std::error::Error;
@@ -20,8 +19,8 @@ impl Runtime {
         }
     }
 
-    pub fn execute(stmt: &Stmt) {
-
+    pub fn execute(&mut self, stmt: &Stmt) -> Result<()> {
+        Ok(())
     }
 }
 
