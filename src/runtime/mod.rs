@@ -1,5 +1,5 @@
 pub mod gc;
-pub mod object;
+pub mod value;
 
 use std::fmt;
 use std::error::Error;

@@ -1,30 +1,81 @@
 use std::ptr::NonNull;
 use std::cell::Cell;
-use std::num::Wrapping;
 use std::borrow::{Borrow, BorrowMut};
 use std::ops::{Deref, DerefMut};
 
+static ROOTED_MASK: u64 = 1 << 63;
+static MARK_MASK: u64 = !ROOTED_MASK;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct Mark(u64);
+
+impl Mark {
+    fn new() -> Self {
+        Mark(0)
+    }
+
+    fn inc(&mut self) {
+        self.0 = (self.0 + 1) & MARK_MASK;
+    }
+}
+
+#[derive(Clone, Copy)]
+struct GcBoxMeta {
+    bits: u64
+}
+
+impl GcBoxMeta {
+    fn new() -> Self {
+        GcBoxMeta {
+            bits: 0
+        }
+    }
+
+    fn is_rooted(&self) -> bool {
+        self.bits & ROOTED_MASK > 0
+    }
+
+    fn set_rooted(&mut self, rooted: bool) {
+        if rooted {
+            self.bits |= ROOTED_MASK;
+        } else {
+            self.bits &= !ROOTED_MASK;
+        }
+    }
+
+    fn mark(&self) -> Mark {
+        Mark(self.bits & MARK_MASK)
+    }
+
+    fn set_mark(&mut self, mark: Mark) {
+        self.bits = (self.bits & ROOTED_MASK) | mark.0;
+    }
+}
+
 pub trait Trace {
-    fn trace(&self, mark: usize);
+    fn trace(&self, mark: Mark);
 }
 
 struct GcBox<T>
 where T: Trace + ?Sized {
-    rooted: Cell<bool>,
-    mark: Cell<usize>,
+    meta: Cell<GcBoxMeta>,
     data: T
 }
 
 impl<T> Trace for GcBox<T>
 where T: Trace {
-    fn trace(&self, mark: usize) {
-        if self.mark.get() != mark {
-            self.mark.set(mark);
+    fn trace(&self, mark: Mark) {
+        let mut meta = self.meta.get();
+
+        if meta.mark() != mark {
+            meta.set_mark(mark);
+            self.meta.set(meta);
             self.data.trace(mark);
         }
     }
 }
 
+#[derive(Clone)]
 pub struct Gc<T>
 where T: Trace {
     ptr: NonNull<GcBox<T>>
@@ -37,10 +88,13 @@ where T: Trace {
             self.ptr.as_ref()
         };
 
-        if gcbox.rooted.get() {
+        let mut meta = gcbox.meta.get();
+        if meta.is_rooted() {
             None
         } else {
-            gcbox.rooted.set(true);
+            meta.set_rooted(true);
+            gcbox.meta.set(meta);
+
             Some(Root {
                 ptr: self.ptr
             })
@@ -54,7 +108,7 @@ where T: Trace {
 
 impl<T> Trace for Gc<T>
 where T: Trace {
-    fn trace(&self, mark: usize) {
+    fn trace(&self, mark: Mark) {
         unsafe {
             self.ptr.as_ref().trace(mark);
         }
@@ -82,9 +136,13 @@ where T: Trace {
 impl<T> Drop for Root<T>
 where T: Trace {
     fn drop(&mut self) {
-        unsafe {
-            self.ptr.as_ref().rooted.set(false)
-        }
+        let gcbox = unsafe {
+            self.ptr.as_ref()
+        };
+
+        let mut meta = gcbox.meta.get();
+        meta.set_rooted(false);
+        gcbox.meta.set(meta);
     }
 }
 
@@ -124,22 +182,21 @@ where T: Trace {
 
 struct Environment<'a> {
     objects: Vec<Box<GcBox<dyn Trace + 'a>>>,
-    mark: Wrapping<usize>
+    mark: Mark
 }
 
 impl<'a> Environment<'a> {
     pub fn new() -> Self {
         Environment {
             objects: Vec::new(),
-            mark: Wrapping(0)
+            mark: Mark::new()
         }
     }
 
-    pub fn construct<T: 'a>(&'a mut self, value: T) -> Root<T> 
-    where T: Trace {
+    pub fn construct<T>(&'a mut self, value: T) -> Root<T> 
+    where T: 'a + Trace {
         let mut value = Box::new(GcBox {
-            rooted: Cell::new(true),
-            mark: Cell::new(self.mark.0),
+            meta: Cell::new(GcBoxMeta::new()),
             data: value
         });
 
@@ -153,16 +210,16 @@ impl<'a> Environment<'a> {
 
     pub fn gc<T>(&mut self, root: &T)
     where T: Trace {
-        self.mark += Wrapping(1);
-        root.trace(self.mark.0);
+        self.mark.inc();
+        root.trace(self.mark);
         self.sweep();
     }
 
     fn sweep(&mut self) {
         let mut i: usize = 0;
         while i < self.objects.len() {
-            let object = &self.objects[i];
-            if !object.rooted.get() || object.mark.get() != self.mark.0 {
+            let meta = self.objects[i].meta.get();
+            if !meta.is_rooted() && meta.mark() != self.mark {
                 self.objects.swap_remove(i);
             } else {
                 i += 1;

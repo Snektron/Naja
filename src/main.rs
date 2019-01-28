@@ -25,15 +25,3 @@ fn main() {
         eprintln!("Runtime Error: {}", err);
     }
 }
-
-// fn test_push(&mut self, params: Vec<Value>) -> Result<Value> {
-//     let (obj_ref, value) = match params {
-//         [Value::Object(obj_ref), value] => (arr, value),
-//         _ => return Err(RuntimeError::InvalidArguments);
-//     };
-
-//     let array = obj_ref.try_downcast::<Array>().ok_or(Err::InvalidArguments)?;
-//     array.items.push(value);
-
-//     Ok(Value::Null)
-// }
