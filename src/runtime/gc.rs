@@ -2,6 +2,7 @@ use std::ptr::NonNull;
 use std::cell::Cell;
 use std::convert::{AsRef, AsMut};
 use std::ops::{Deref, DerefMut};
+use std::hash::{Hash, Hasher};
 
 static ROOTED_MASK: u64 = 1 << 63;
 static MARK_MASK: u64 = !ROOTED_MASK;
@@ -56,6 +57,15 @@ pub trait Trace {
     fn trace(&self, mark: Mark);
 }
 
+impl<T> Trace for Option<T>
+where T: Trace {
+    fn trace(&self, mark: Mark) {
+        if let Some(item) = self {
+            item.trace(mark);
+        }
+    }
+}
+
 struct GcBox<T>
 where T: Trace + ?Sized {
     meta: Cell<GcBoxMeta>,
@@ -75,10 +85,25 @@ where T: Trace {
     }
 }
 
-#[derive(Clone)]
 pub struct Gc<T>
 where T: Trace {
     ptr: NonNull<GcBox<T>>
+}
+
+impl<T> Clone for Gc<T>
+where T: Trace {
+    fn clone(&self) -> Gc<T> {
+        Gc {
+            ptr: self.ptr
+        }
+    }
+}
+
+impl<T> Hash for Gc<T>
+where T: Trace {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        (self.ptr.as_ptr() as usize).hash(state);
+    }
 }
 
 impl<T> Gc<T>

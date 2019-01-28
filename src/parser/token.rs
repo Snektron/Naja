@@ -24,6 +24,7 @@ pub enum Token {
     Return,
 
     // Literals
+    Null,
     Ident(String),
     Integer(String),
     Float(String)

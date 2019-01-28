@@ -267,6 +267,7 @@ impl<'i> Parser<'i> {
 
     fn atom(&mut self) -> Result<Expr> {
         match self.next()? {
+            Token::Null => Ok(Expr::Literal(Literal::Null)),
             Token::Integer(text) => Ok(Expr::Literal(Literal::Integer(text.parse::<i64>().expect("int parse")))),
             Token::Float(text) => Ok(Expr::Literal(Literal::Float(text.parse::<f64>().expect("float parse")))),
             Token::ParenOpen => {

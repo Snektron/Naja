@@ -1,30 +1,83 @@
+use std::convert::From;
+use std::collections::HashMap;
+use crate::ast::{Literal, Ident};
 use crate::runtime::gc::{Trace, Gc, Mark};
 
-pub struct Array {
-    pub items: Vec<Value>
+pub struct Scope {
+    parent: Option<Gc<Scope>>,
+    bindings: HashMap<Ident, Value>
 }
 
-impl Array {
+impl Scope {
     pub fn new() -> Self {
-        Array {
-            items: Vec::new()
+        Scope {
+            parent: None,
+            bindings: HashMap::new()
+        }
+    }
+
+    pub fn child(parent: Gc<Scope>) -> Self {
+        Scope {
+            parent: Some(parent),
+            bindings: HashMap::new()
+        }
+    }
+
+    pub fn get(&self, name: &Ident) -> Option<Value> {
+        if let Some(value) = self.bindings.get(name) {
+            Some(value.clone())
+        } else if let Some(parent) = self.parent.as_ref() {
+            parent.root().get(name)
+        } else {
+            None
+        }
+    }
+
+    fn set_r(&mut self, name: &Ident, value: &mut Option<Value>) {
+        if let Some(binding) = self.bindings.get_mut(name) {
+            *binding = value.take().unwrap()
+        } else if let Some(parent) = self.parent.as_mut() {
+            parent.root().set_r(name, value)
+        }
+    }
+
+    pub fn set(&mut self, name: &Ident, value: Value) {
+        let mut value = Some(value);
+        self.set_r(name, &mut value);
+        if let Some(value) = value {
+            // no previous binding, create a new one
+            self.bindings.insert(name.clone(), value);
         }
     }
 }
 
-impl Trace for Array {
+impl Trace for Scope {
     fn trace(&self, mark: Mark) {
-        for item in self.items.iter() {
+        self.parent.trace(mark);
+        for item in self.bindings.values() {
             item.trace(mark);
         }
     }
 }
 
+pub type Array = Vec<Value>;
+
+impl Trace for Array {
+    fn trace(&self, mark: Mark) {
+        for item in self.iter() {
+            item.trace(mark);
+        }
+    }
+}
+
+#[derive(Clone)]
 pub enum Value {
     Null,
-    Int(i64),
+    Integer(i64),
     Float(f64),
-    Array(Gc<Array>)
+    Bool(bool),
+    Array(Gc<Array>),
+    Scope(Gc<Scope>)
 }
 
 impl Trace for Value {
@@ -33,5 +86,34 @@ impl Trace for Value {
             Value::Array(array) => array.trace(mark),
             _ => {}
         }
+    }
+}
+
+impl From<Literal> for Value {
+    fn from(literal: Literal) -> Value {
+        match literal {
+            Literal::Null => Value::Null,
+            Literal::Integer(val) => val.into(),
+            Literal::Float(val) => val.into(),
+            Literal::Bool(val) => val.into()
+        }
+    }
+}
+
+impl From<i64> for Value {
+    fn from(val: i64) -> Value {
+        Value::Integer(val)
+    }
+}
+
+impl From<f64> for Value {
+    fn from(val: f64) -> Value {
+        Value::Float(val)
+    }
+}
+
+impl From<bool> for Value {
+    fn from(val: bool) -> Value {
+        Value::Bool(val)
     }
 }

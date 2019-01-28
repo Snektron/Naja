@@ -2,8 +2,10 @@ pub type Ident = String;
 
 #[derive(Debug, Clone)]
 pub enum Literal {
+    Null,
     Integer(i64),
-    Float(f64)
+    Float(f64),
+    Bool(bool)
 }
 
 #[derive(Debug, Clone)]

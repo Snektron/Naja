@@ -13,6 +13,7 @@ lazy_static! {
         map.insert("else", Token::Else);
         map.insert("while", Token::While);
         map.insert("return", Token::Return);
+        map.insert("null", Token::Null);
         map
     };
 }
