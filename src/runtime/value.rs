@@ -9,16 +9,9 @@ pub struct Scope {
 }
 
 impl Scope {
-    pub fn new() -> Self {
+    pub fn new(parent: Option<Gc<Scope>>) -> Self {
         Scope {
-            parent: None,
-            bindings: HashMap::new()
-        }
-    }
-
-    pub fn child(parent: Gc<Scope>) -> Self {
-        Scope {
-            parent: Some(parent),
+            parent: parent,
             bindings: HashMap::new()
         }
     }
@@ -70,6 +63,20 @@ pub enum Value {
     Bool(bool),
     Array(Gc<Array>),
     Scope(Gc<Scope>)
+}
+
+impl Value {
+    pub fn truthy(&self) -> bool {
+        use Value::*;
+
+        match self {
+            Null => false,
+            Integer(x) => *x != 0,
+            Float(x) => *x != 0.0,
+            Bool(x) => *x,
+            _ => false
+        }
+    }
 }
 
 impl Trace for Value {

@@ -7,7 +7,16 @@ mod runtime;
 
 fn main() {
     let input = r#"
-        c = 1 + 2
+        a = 12
+
+        b = null
+        if a + 1 == 11 {
+            b = 5
+        } else {
+            b = -10
+        }
+
+        return b
     "#;
     let mut parser = parser::Parser::new(input);
 
@@ -21,7 +30,15 @@ fn main() {
 
     let mut rt = runtime::Runtime::new();
     let result = rt.execute(&ast);
-    if let Err(err) = result {
-        eprintln!("Runtime Error: {}", err);
+
+    use runtime::value::Value;
+
+    match result {
+        Err(err) => eprintln!("Runtime Error: {}", err),
+        Ok(None) => println!("No return value"),
+        Ok(Some(Value::Null)) => println!("Null"),
+        Ok(Some(Value::Integer(x))) => println!("Integer {}", x),
+        Ok(Some(Value::Float(x))) => println!("Float {}", x),
+        Ok(_) => println!("Other value")
     }
 }

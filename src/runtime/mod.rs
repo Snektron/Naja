@@ -38,24 +38,67 @@ impl Runtime {
     }
 
     pub fn push(&mut self) -> Gc<Scope> {
-        self.stack.push(self.env.construct(Scope::new()).decay());
+        let parent = self.stack.last().cloned();
+        self.stack.push(self.env.construct(Scope::new(parent)).decay());
         self.top()
     }
 
-    pub fn execute(&mut self, stmt: &Stmt) -> Result<Value> {
+    fn with_scope<F>(&mut self, f: F) -> Result<Option<Value>>
+    where F: FnOnce(&mut Self) -> Result<Option<Value>> {
+        self.push();
+        let res = f(self);
+        self.pop();
+        res
+    }
+
+    pub fn execute(&mut self, stmt: &Stmt) -> Result<Option<Value>> {
         self.push();
         let result = self.stmt(stmt);
         self.pop();
         result
     }
 
-    pub fn stmt(&mut self, stmt: &Stmt) -> Result<Value> {
+    pub fn stmt(&mut self, stmt: &Stmt) -> Result<Option<Value>> {
         use Stmt::*;
 
         match stmt {
-            Return(expr) => self.expr(expr),
+            Compound(stmts) => self.with_scope(|rt| rt.compound(stmts)),
+            If(cond, csq, alt) => self.with_scope(|rt| rt.if_stmt(cond.as_ref(), csq.as_ref(), alt.as_ref().map(|alt| alt.as_ref()))),
+            While(cond, csq) => self.with_scope(|rt| rt.while_stmt(cond.as_ref(), csq.as_ref())),
+            Return(expr) => self.expr(expr).map(|v| Some(v)),
+            Expr(expr) => self.expr(expr).map(|_| None),
             _ => Err(RuntimeError::NotYetImplemented)
         }
+    }
+
+    fn compound(&mut self, stmts: &Vec<Stmt>) -> Result<Option<Value>> {
+        for stmt in stmts.iter() {
+            if let rv @ Some(_) = self.stmt(stmt)? {
+                return Ok(rv);
+            }
+        }
+
+        Ok(None)
+    }
+
+    fn if_stmt(&mut self, cond: &Expr, csq: &Stmt, alt: Option<&Stmt>) -> Result<Option<Value>> {
+        if self.expr(cond)?.truthy() {
+            self.stmt(csq)
+        } else if let Some(alt) = alt {
+            self.stmt(alt)
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn while_stmt(&mut self, cond: &Expr, csq: &Stmt) -> Result<Option<Value>> {
+        while self.expr(cond)?.truthy() {
+            if let rv @ Some(_) = self.stmt(csq)? {
+                return Ok(rv);
+            }
+        }
+
+        Ok(None)
     }
 
     fn expr(&mut self, expr: &Expr) -> Result<Value> {
@@ -144,7 +187,6 @@ impl Runtime {
             Div => div_by_zero_op!(std::ops::Div::div),
             Mod => div_by_zero_op!(std::ops::Rem::rem),
             Equals => simple_ref_op!(std::cmp::PartialEq::eq),
-            _ => Err(RuntimeError::Arithmetic)
         }
     }
 
