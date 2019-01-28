@@ -78,7 +78,7 @@ impl Runtime {
             Return(expr) => self.expr(expr).map(|v| Some(v)),
             Expr(expr) => self.expr(expr).map(|_| None),
             FnDecl(name, params, body) => {
-                let mut scope = self.top();
+                let scope = self.top();
                 let func = Function{
                     parent_scope: scope.clone(),
                     params: params.clone(),
@@ -165,7 +165,7 @@ impl Runtime {
         func.unroot();
 
         for (name, expr) in params.into_iter().zip(args) {
-            scope.set(&name, self.expr(expr)?);
+            scope.set_local(&name, self.expr(expr)?);
         }
 
         self.stack.push(scope.unroot());
@@ -235,14 +235,16 @@ impl Runtime {
             }}
         }
 
-        match kind {
+        let res = match kind {
             Add => simple_op!(std::ops::Add::add),
             Sub => simple_op!(std::ops::Sub::sub),
             Mul => simple_op!(std::ops::Mul::mul),
             Div => div_by_zero_op!(std::ops::Div::div),
             Mod => div_by_zero_op!(std::ops::Rem::rem),
             Equals => simple_ref_op!(std::cmp::PartialEq::eq),
-        }
+        };
+
+        res
     }
 
     fn unop(&mut self, kind: UnOpKind, value: Value) -> Result<Value> {
@@ -275,7 +277,6 @@ impl Runtime {
 pub enum RuntimeError {
     DivideByZero,
     Arithmetic,
-    NotYetImplemented,
     UndefinedVariable,
     InvalidArguments,
     NotAFunction
@@ -286,7 +287,6 @@ impl fmt::Display for RuntimeError {
         match self {
             RuntimeError::DivideByZero => write!(f, "Divide by Zero"),
             RuntimeError::Arithmetic => write!(f, "Arithmetic operator on unsupported type(s)"),
-            RuntimeError::NotYetImplemented => write!(f, "Not yet implemented"),
             RuntimeError::UndefinedVariable => write!(f, "Undefined variable"),
             RuntimeError::InvalidArguments => write!(f, "Invalid arguments"),
             RuntimeError::NotAFunction => write!(f, "Value is not a function")
@@ -299,7 +299,6 @@ impl Error for RuntimeError {
         match self {
             RuntimeError::DivideByZero => "Runtime error: Divide by Zero",
             RuntimeError::Arithmetic => "Runtime error: Arithmetic",
-            RuntimeError::NotYetImplemented => "Runtime error: Not yet implemented",
             RuntimeError::UndefinedVariable => "Runtime error: Undefined variable",
             RuntimeError::InvalidArguments => "Runtime error: Invalid arguments",
             RuntimeError::NotAFunction => "Runtime error: Value is not a function"

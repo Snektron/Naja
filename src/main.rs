@@ -1,16 +1,25 @@
 #[macro_use]
 extern crate lazy_static;
 
-mod ast;
-mod parser;
-mod runtime;
+pub mod ast;
+pub mod parser;
+pub mod runtime;
 
 fn main() {
     let input = r#"
         fn test(x) = x * 2
 
-        return test(2)
+        fn gcd(a, b) {
+            if b == 0 {
+                return a
+            } else {
+                return gcd(b, a % b)
+            }
+        }
+
+        return gcd(60, 123)
     "#;
+
     let mut parser = parser::Parser::new(input);
 
     let ast = match parser.program() {
@@ -24,14 +33,9 @@ fn main() {
     let mut rt = runtime::Runtime::new();
     let result = rt.execute(&ast);
 
-    use runtime::value::Value;
-
     match result {
         Err(err) => eprintln!("Runtime Error: {}", err),
         Ok(None) => println!("No return value"),
-        Ok(Some(Value::Null)) => println!("Null"),
-        Ok(Some(Value::Integer(x))) => println!("Integer {}", x),
-        Ok(Some(Value::Float(x))) => println!("Float {}", x),
-        Ok(_) => println!("Other value")
+        Ok(Some(val)) => println!("{:?}", val),
     }
 }

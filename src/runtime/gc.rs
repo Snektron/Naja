@@ -3,6 +3,7 @@ use std::cell::Cell;
 use std::convert::{AsRef, AsMut};
 use std::ops::{Deref, DerefMut};
 use std::hash::{Hash, Hasher};
+use std::fmt;
 
 static ROOTED_MASK: u64 = 1 << 63;
 static MARK_MASK: u64 = !ROOTED_MASK;
@@ -112,6 +113,13 @@ impl<T> Hash for Gc<T>
 where T: Trace {
     fn hash<H: Hasher>(&self, state: &mut H) {
         (self.ptr.as_ptr() as usize).hash(state);
+    }
+}
+
+impl<T> fmt::Debug for Gc<T>
+where T: Trace {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.ptr.as_ptr() as usize)
     }
 }
 

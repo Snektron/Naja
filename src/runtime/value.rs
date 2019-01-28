@@ -39,8 +39,12 @@ impl Scope {
         self.set_r(name, &mut value);
         if let Some(value) = value {
             // no previous binding, create a new one
-            self.bindings.insert(name.clone(), value);
+            self.set_local(name, value);
         }
+    }
+
+    pub fn set_local(&mut self, name: &Ident, value: Value) {
+        self.bindings.insert(name.clone(), value);
     }
 }
 
@@ -67,7 +71,7 @@ impl Trace for Function {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Value {
     Null,
     Integer(i64),
