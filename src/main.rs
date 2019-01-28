@@ -17,7 +17,15 @@ fn main() {
             }
         }
 
-        return gcd(60, 123)
+        fn oof(a) {
+            fn python() {
+                return a
+            }
+
+            return python
+        }
+
+        return oof(10)()
     "#;
 
     let mut parser = parser::Parser::new(input);

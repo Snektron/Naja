@@ -159,7 +159,7 @@ impl Runtime {
             return Err(RuntimeError::InvalidArguments)
         }
 
-        let mut scope = self.new_scope();
+        let mut scope = self.env.construct(Scope::new(Some(func.parent_scope.clone())));
         let params = func.params.clone();
         let body = func.body.clone();
         func.unroot();
