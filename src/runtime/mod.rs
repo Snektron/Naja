@@ -37,9 +37,14 @@ impl Runtime {
         self.stack.pop().unwrap()
     }
 
-    pub fn push(&mut self) -> Gc<Scope> {
+    pub fn new_scope(&mut self) -> Root<Scope> {
         let parent = self.stack.last().cloned();
-        self.stack.push(self.env.construct(Scope::new(parent)).decay());
+        self.env.construct(Scope::new(parent))
+    }
+
+    pub fn push(&mut self) -> Gc<Scope> {
+        let scope = self.new_scope().decay();
+        self.stack.push(scope);
         self.top()
     }
 
@@ -51,11 +56,16 @@ impl Runtime {
         res
     }
 
+    pub fn read(&self, name: &Ident) -> Result<Value> {
+        self.top().root().get(name).ok_or(RuntimeError::UndefinedVariable)
+    }
+
+    pub fn write(&self, name: &Ident, value: Value) {
+        self.top().root().set(name, value)
+    }
+
     pub fn execute(&mut self, stmt: &Stmt) -> Result<Option<Value>> {
-        self.push();
-        let result = self.stmt(stmt);
-        self.pop();
-        result
+        self.with_scope(|rt| rt.stmt(stmt))
     }
 
     pub fn stmt(&mut self, stmt: &Stmt) -> Result<Option<Value>> {
@@ -67,7 +77,17 @@ impl Runtime {
             While(cond, csq) => self.with_scope(|rt| rt.while_stmt(cond.as_ref(), csq.as_ref())),
             Return(expr) => self.expr(expr).map(|v| Some(v)),
             Expr(expr) => self.expr(expr).map(|_| None),
-            _ => Err(RuntimeError::NotYetImplemented)
+            FnDecl(name, params, body) => {
+                let mut scope = self.top();
+                let func = Function{
+                    parent_scope: scope.clone(),
+                    params: params.clone(),
+                    body: body.clone()
+                };
+                let func = self.env.construct(func);
+                scope.root().set(name, Value::Function(func.decay()));
+                Ok(None)
+            }
         }
     }
 
@@ -115,7 +135,10 @@ impl Runtime {
                 self.unop(kind.clone(), value)
             },
             Literal(literal) => Ok(Value::from(literal.clone())),
-            Call(..) => Err(RuntimeError::NotYetImplemented),
+            Call(callee, args) => {
+                let callee = self.expr(callee)?;
+                self.call(callee, args)
+            },
             LValue(expr) => self.lvalue_as_rvalue(expr),
             Assignment(left, right) => {
                 let right = self.expr(right)?;
@@ -124,11 +147,43 @@ impl Runtime {
         }
     }
 
+    pub fn call(&mut self, callee: Value, args: &Vec<Expr>) -> Result<Value> {
+        let func = match callee {
+            Value::Function(func) => func,
+            _ => Err(RuntimeError::NotAFunction)?
+        };
+
+        let func = func.root();
+
+        if func.params.len() != args.len() {
+            return Err(RuntimeError::InvalidArguments)
+        }
+
+        let mut scope = self.new_scope();
+        let params = func.params.clone();
+        let body = func.body.clone();
+        func.unroot();
+
+        for (name, expr) in params.into_iter().zip(args) {
+            scope.set(&name, self.expr(expr)?);
+        }
+
+        self.stack.push(scope.unroot());
+        let res = self.stmt(body.as_ref());
+        self.pop();
+
+        match res {
+            Ok(None) => Ok(Value::Null),
+            Ok(Some(val)) => Ok(val),
+            Err(err) => Err(err)
+        }
+    }
+
     fn assignment(&mut self, left: &LValueExpr, right: Value) -> Result<Value> {
         use LValueExpr::*;
 
         match left {
-            Ident(name) => self.top().root().set(name, right.clone())
+            Ident(name) => self.write(name, right.clone())
         }
 
         Ok(right)
@@ -138,7 +193,7 @@ impl Runtime {
         use LValueExpr::*;
 
         match expr {
-            Ident(name) => self.top().root().get(name).ok_or(RuntimeError::UndefinedVariable)
+            Ident(name) => self.read(name)
         }
     }
 
@@ -221,7 +276,9 @@ pub enum RuntimeError {
     DivideByZero,
     Arithmetic,
     NotYetImplemented,
-    UndefinedVariable
+    UndefinedVariable,
+    InvalidArguments,
+    NotAFunction
 }
 
 impl fmt::Display for RuntimeError {
@@ -230,7 +287,9 @@ impl fmt::Display for RuntimeError {
             RuntimeError::DivideByZero => write!(f, "Divide by Zero"),
             RuntimeError::Arithmetic => write!(f, "Arithmetic operator on unsupported type(s)"),
             RuntimeError::NotYetImplemented => write!(f, "Not yet implemented"),
-            RuntimeError::UndefinedVariable => write!(f, "Undefined variable")
+            RuntimeError::UndefinedVariable => write!(f, "Undefined variable"),
+            RuntimeError::InvalidArguments => write!(f, "Invalid arguments"),
+            RuntimeError::NotAFunction => write!(f, "Value is not a function")
         }
     }
 }
@@ -241,7 +300,9 @@ impl Error for RuntimeError {
             RuntimeError::DivideByZero => "Runtime error: Divide by Zero",
             RuntimeError::Arithmetic => "Runtime error: Arithmetic",
             RuntimeError::NotYetImplemented => "Runtime error: Not yet implemented",
-            RuntimeError::UndefinedVariable => "Runtime error: Undefined variable"
+            RuntimeError::UndefinedVariable => "Runtime error: Undefined variable",
+            RuntimeError::InvalidArguments => "Runtime error: Invalid arguments",
+            RuntimeError::NotAFunction => "Runtime error: Value is not a function"
         }
     }
 }

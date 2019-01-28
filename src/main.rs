@@ -7,16 +7,9 @@ mod runtime;
 
 fn main() {
     let input = r#"
-        a = 12
+        fn test(x) = x * 2
 
-        b = null
-        if a + 1 == 11 {
-            b = 5
-        } else {
-            b = -10
-        }
-
-        return b
+        return test(2)
     "#;
     let mut parser = parser::Parser::new(input);
 

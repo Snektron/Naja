@@ -1,6 +1,6 @@
 use std::convert::From;
 use std::collections::HashMap;
-use crate::ast::{Literal, Ident};
+use crate::ast::{Literal, Ident, Stmt};
 use crate::runtime::gc::{Trace, Gc, Mark};
 
 pub struct Scope {
@@ -55,6 +55,18 @@ impl Trace for Scope {
 
 pub type Array = Vec<Value>;
 
+pub struct Function {
+    pub parent_scope: Gc<Scope>,
+    pub params: Vec<Ident>,
+    pub body: Box<Stmt>
+}
+
+impl Trace for Function {
+    fn trace(&self, mark: Mark) {
+        self.parent_scope.trace(mark);
+    }
+}
+
 #[derive(Clone)]
 pub enum Value {
     Null,
@@ -62,7 +74,8 @@ pub enum Value {
     Float(f64),
     Bool(bool),
     Array(Gc<Array>),
-    Scope(Gc<Scope>)
+    Scope(Gc<Scope>),
+    Function(Gc<Function>)
 }
 
 impl Value {
