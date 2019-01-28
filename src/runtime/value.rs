@@ -62,14 +62,6 @@ impl Trace for Scope {
 
 pub type Array = Vec<Value>;
 
-impl Trace for Array {
-    fn trace(&self, mark: Mark) {
-        for item in self.iter() {
-            item.trace(mark);
-        }
-    }
-}
-
 #[derive(Clone)]
 pub enum Value {
     Null,

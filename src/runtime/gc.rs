@@ -66,6 +66,15 @@ where T: Trace {
     }
 }
 
+impl<T> Trace for Vec<T>
+where T: Trace {
+    fn trace(&self, mark: Mark) {
+        for item in self.iter() {
+            item.trace(mark);
+        }
+    }
+}
+
 struct GcBox<T>
 where T: Trace + ?Sized {
     meta: Cell<GcBoxMeta>,

@@ -11,59 +11,91 @@ pub type Result<T> = std::result::Result<T, RuntimeError>;
 
 pub struct Runtime {
     env: Environment,
-    root: Scope
+    stack: Vec<Gc<Scope>>
 }
 
 impl Runtime {
     pub fn new() -> Self {
-        Runtime {
+        let mut rt = Runtime {
             env: Environment::new(),
-            root: Scope::new()
+            stack: Vec::new()
+        };
+
+        rt.push();
+        rt
+    }
+
+    pub fn top(&self) -> Gc<Scope> {
+        self.stack.last().unwrap().clone()
+    }
+
+    pub fn pop(&mut self) -> Gc<Scope> {
+        if self.stack.len() == 1 {
+            panic!("Popping all scopes makes runtime invalid");
         }
+
+        self.stack.pop().unwrap()
+    }
+
+    pub fn push(&mut self) -> Gc<Scope> {
+        self.stack.push(self.env.construct(Scope::new()).decay());
+        self.top()
     }
 
     pub fn execute(&mut self, stmt: &Stmt) -> Result<Value> {
-        Err(RuntimeError::NotYetImplemented)
+        self.push();
+        let result = self.stmt(stmt);
+        self.pop();
+        result
     }
 
-    fn expr(&mut self, scope: &mut Scope, expr: &Expr) -> Result<Value> {
+    pub fn stmt(&mut self, stmt: &Stmt) -> Result<Value> {
+        use Stmt::*;
+
+        match stmt {
+            Return(expr) => self.expr(expr),
+            _ => Err(RuntimeError::NotYetImplemented)
+        }
+    }
+
+    fn expr(&mut self, expr: &Expr) -> Result<Value> {
         use Expr::*;
 
         match expr {
             BinOp(kind, left, right) => {
-                let left = self.expr(scope, left)?;
-                let right = self.expr(scope, right)?;
+                let left = self.expr(left)?;
+                let right = self.expr(right)?;
                 self.binop(kind.clone(), left, right)
             },
             UnOp(kind, value) => {
-                let value = self.expr(scope, value)?;
+                let value = self.expr(value)?;
                 self.unop(kind.clone(), value)
             },
             Literal(literal) => Ok(Value::from(literal.clone())),
             Call(..) => Err(RuntimeError::NotYetImplemented),
-            LValue(expr) => self.lvalue_as_rvalue(scope, expr),
+            LValue(expr) => self.lvalue_as_rvalue(expr),
             Assignment(left, right) => {
-                let right = self.expr(scope, right)?;
-                self.assignment(scope, left, right)
+                let right = self.expr(right)?;
+                self.assignment(left, right)
             }
         }
     }
 
-    fn assignment(&mut self, scope: &mut Scope, left: &LValueExpr, right: Value) -> Result<Value> {
+    fn assignment(&mut self, left: &LValueExpr, right: Value) -> Result<Value> {
         use LValueExpr::*;
 
         match left {
-            Ident(name) => scope.set(name, right.clone())
+            Ident(name) => self.top().root().set(name, right.clone())
         }
 
         Ok(right)
     }
 
-    fn lvalue_as_rvalue(&mut self, scope: &Scope, expr: &LValueExpr) -> Result<Value> {
+    fn lvalue_as_rvalue(&mut self, expr: &LValueExpr) -> Result<Value> {
         use LValueExpr::*;
 
         match expr {
-            Ident(name) => scope.get(name).ok_or(RuntimeError::UndefinedVariable)
+            Ident(name) => self.top().root().get(name).ok_or(RuntimeError::UndefinedVariable)
         }
     }
 
@@ -138,7 +170,7 @@ impl Runtime {
     }
 
     pub fn gc(&mut self) {
-        self.env.gc(&self.root);
+        self.env.gc(&self.stack);
     }
 }
 
