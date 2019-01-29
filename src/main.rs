@@ -7,8 +7,6 @@ pub mod runtime;
 
 fn main() {
     let input = r#"
-        fn test(x) = x * 2
-
         fn gcd(a, b) {
             if b == 0 {
                 return a
@@ -17,15 +15,17 @@ fn main() {
             }
         }
 
-        fn oof(a) {
-            fn python() {
-                return a
+        fn add(a, b) = a + b
+
+        fn test(a) {
+            fn oof(b) {
+                return gcd(a, b)
             }
 
-            return python
+            return oof
         }
 
-        return oof(10)()
+        return test(60)(123)
     "#;
 
     let mut parser = parser::Parser::new(input);
