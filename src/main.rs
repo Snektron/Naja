@@ -5,36 +5,28 @@ pub mod ast;
 pub mod parser;
 pub mod runtime;
 
-fn main() {
-    let input = r#"
-        fn gcd(a, b) {
-            if b == 0 {
-                return a
-            } else {
-                return gcd(b, a % b)
-            }
-        }
+use std::fs::File;
+use std::env;
+use std::io::Read;
 
-        fn add(a, b) = a + b
+fn main() -> Result<(), std::io::Error> {
+    let filename = env::args().nth(1);
+    if let None = filename {
+        eprintln!("Expected file name");
+        return Ok(());
+    }
 
-        fn test(a) {
-            fn oof(b) {
-                return gcd(a, b)
-            }
+    let mut contents = String::new();
+    let mut file = File::open(filename.unwrap())?;
+    file.read_to_string(&mut contents)?;
 
-            return oof
-        }
-
-        return test(60)(123)
-    "#;
-
-    let mut parser = parser::Parser::new(input);
+    let mut parser = parser::Parser::new(&contents);
 
     let ast = match parser.program() {
         Ok(ast) => ast,
         Err(err) => {
             eprintln!("Parse Error: {}", err);
-            return;
+            return Ok(());
         }
     };
 
@@ -46,4 +38,6 @@ fn main() {
         Ok(None) => println!("No return value"),
         Ok(Some(val)) => println!("{:?}", val),
     }
+
+    Ok(())
 }

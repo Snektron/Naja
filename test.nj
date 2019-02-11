@@ -1,0 +1,33 @@
+fn gcd(a, b) {
+    if b == 0 {
+        return a
+    } else {
+        return gcd(b, a % b)
+    }
+}
+
+fn add(a, b) = a + b
+
+fn test(a, b2, c) {
+    a = 0
+    fn oof(b) {
+        a = b
+        return 0
+    }
+
+    fn auwie() {
+        return a
+    }
+
+    if c == 0 {
+        oof(b2)
+    }
+
+    return auwie
+}
+
+res = test(2, 3, 0)
+res2 = test(4, 5, 1)
+res()
+return res2()
+
