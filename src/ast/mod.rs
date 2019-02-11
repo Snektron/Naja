@@ -30,7 +30,8 @@ pub enum Expr {
     Literal(Literal),
     Call(Box<Expr>, Vec<Expr>),
     LValue(LValueExpr),
-    Assignment(LValueExpr, Box<Expr>)
+    Assignment(LValueExpr, Box<Expr>),
+    FnDecl(Vec<Ident>, Box<Stmt>)
 }
 
 #[derive(Debug, Clone)]
@@ -45,5 +46,4 @@ pub enum Stmt {
     While(Box<Expr>, Box<Stmt>),
     Return(Box<Expr>),
     Expr(Box<Expr>),
-    FnDecl(Ident, Vec<Ident>, Box<Stmt>)
 }

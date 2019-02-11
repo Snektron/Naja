@@ -15,6 +15,7 @@ pub enum Token {
     Percent,
     EqEq,
     Eq,
+    Pipe,
 
     // Keywords
     Fn,
@@ -22,6 +23,8 @@ pub enum Token {
     Else,
     While,
     Return,
+    True,
+    False,
 
     // Literals
     Null,

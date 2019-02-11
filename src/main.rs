@@ -35,8 +35,8 @@ fn main() -> Result<(), std::io::Error> {
 
     match result {
         Err(err) => eprintln!("Runtime Error: {}", err),
-        Ok(None) => println!("No return value"),
-        Ok(Some(val)) => println!("{:?}", val),
+        Ok(None) => {},
+        Ok(Some(val)) => println!("{}", val),
     }
 
     Ok(())

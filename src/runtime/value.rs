@@ -1,5 +1,6 @@
 use std::convert::From;
 use std::collections::HashMap;
+use std::fmt;
 use crate::ast::{Literal, Ident, Stmt};
 use crate::runtime::gc::{Trace, Gc, Mark};
 
@@ -80,6 +81,22 @@ pub enum Value {
     Array(Gc<Array>),
     Scope(Gc<Scope>),
     Function(Gc<Function>)
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use Value::*;
+
+        match self {
+            Null => write!(f, "<Null>"),
+            Integer(x) => write!(f, "{}", x),
+            Float(x) => write!(f, "{}", x),
+            Bool(x) => write!(f, "{}", x),
+            Array(arr) => write!(f, "<Array@{:?}>", arr),
+            Scope(scope) => write!(f, "<Scope@{:?}>", scope),
+            Function(func) => write!(f, "<Function@{:?}>", func)
+        }
+    }
 }
 
 impl Value {

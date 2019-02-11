@@ -168,7 +168,10 @@ impl<'i> Parser<'i> {
             tok => unexpected!(tok.clone())
         }?;
 
-        Ok(Stmt::FnDecl(ident, params, Box::new(body)))
+        let fndecl = Expr::FnDecl(params, Box::new(body));
+        let lvalue = LValueExpr::Ident(ident);
+        let assignment = Expr::Assignment(lvalue, Box::new(fndecl));
+        Ok(Stmt::Expr(Box::new(assignment)))
     }
 
     fn expr(&mut self) -> Result<Expr> {
@@ -268,6 +271,8 @@ impl<'i> Parser<'i> {
     fn atom(&mut self) -> Result<Expr> {
         match self.next()? {
             Token::Null => Ok(Expr::Literal(Literal::Null)),
+            Token::True => Ok(Expr::Literal(Literal::Bool(true))),
+            Token::False => Ok(Expr::Literal(Literal::Bool(false))),
             Token::Integer(text) => Ok(Expr::Literal(Literal::Integer(text.parse::<i64>().expect("int parse")))),
             Token::Float(text) => Ok(Expr::Literal(Literal::Float(text.parse::<f64>().expect("float parse")))),
             Token::ParenOpen => {
@@ -276,6 +281,16 @@ impl<'i> Parser<'i> {
                 Ok(expr)
             },
             Token::Ident(text) => Ok(Expr::LValue(LValueExpr::Ident(text))),
+            Token::Pipe => {
+                let params = self.list_until(Token::Pipe, Self::ident)?;
+                let body = match self.peek()? {
+                    Token::BraceOpen => self.compound_stmt(),
+                    _ => self.expr().map(Box::new).map(Stmt::Return)
+                }?;
+
+                let decl = Expr::FnDecl(params, Box::new(body));
+                Ok(decl)
+            },
             tok => unexpected!(tok)
         }
     }

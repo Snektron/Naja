@@ -76,18 +76,7 @@ impl Runtime {
             If(cond, csq, alt) => self.with_scope(|rt| rt.if_stmt(cond.as_ref(), csq.as_ref(), alt.as_ref().map(|alt| alt.as_ref()))),
             While(cond, csq) => self.with_scope(|rt| rt.while_stmt(cond.as_ref(), csq.as_ref())),
             Return(expr) => self.expr(expr).map(|v| Some(v)),
-            Expr(expr) => self.expr(expr).map(|_| None),
-            FnDecl(name, params, body) => {
-                let scope = self.top();
-                let func = Function{
-                    parent_scope: scope.clone(),
-                    params: params.clone(),
-                    body: body.clone()
-                };
-                let func = self.env.construct(func);
-                scope.root().set(name, Value::Function(func.decay()));
-                Ok(None)
-            }
+            Expr(expr) => self.expr(expr).map(|_| None)
         }
     }
 
@@ -143,6 +132,15 @@ impl Runtime {
             Assignment(left, right) => {
                 let right = self.expr(right)?;
                 self.assignment(left, right)
+            },
+            FnDecl(params, body) => {
+                let func = Function{
+                    parent_scope: self.top().clone(),
+                    params: params.clone(),
+                    body: body.clone()
+                };
+                let func = self.env.construct(func);
+                Ok(Value::Function(func.decay()))
             }
         }
     }

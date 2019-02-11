@@ -119,7 +119,7 @@ where T: Trace {
 impl<T> fmt::Debug for Gc<T>
 where T: Trace {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.ptr.as_ptr() as usize)
+        write!(f, "{:p}", self.ptr.as_ptr())
     }
 }
 

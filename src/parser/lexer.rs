@@ -14,6 +14,8 @@ lazy_static! {
         map.insert("while", Token::While);
         map.insert("return", Token::Return);
         map.insert("null", Token::Null);
+        map.insert("true", Token::True);
+        map.insert("false", Token::False);
         map
     };
 }
@@ -132,6 +134,7 @@ impl<'i> Lexer<'i> {
                 _ => Token::Eq,
                 '=' => Token::EqEq
             },
+            '|' => token!(Token::Pipe),
             c if c.is_alphabetic() || !c.is_ascii() || c == '_' => Ok(self.word()),
             c if c.is_digit(10) => Ok(self.number()),
             c => Err(LexError::UnexpectedChar(c))
